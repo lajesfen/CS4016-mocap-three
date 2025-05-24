@@ -1,121 +1,101 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
 import {
-  PoseLandmarker,
-  FilesetResolver,
   DrawingUtils,
+  PoseLandmarker,
   PoseLandmarkerResult,
 } from "@mediapipe/tasks-vision";
+import { useEffect, useRef, useState } from "react";
+import { usePoseLandmarker } from "../hooks/usePoseLandmarker";
+import ThreeCanvas from "./ThreeCanvas";
 
-const LandmarkCanvas = () => {
+export type Landmark = {
+  x: number;
+  y: number;
+  z: number;
+};
+
+export default function LandmarkCanvas() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const landmarkerRef = useRef<PoseLandmarker | null>(null);
+  const landmarkerRef = usePoseLandmarker();
   const [dimensions, setDimensions] = useState<{
     width: number;
     height: number;
   } | null>(null);
-  const [showLandmarks, setShowLandmarks] = useState(true);
+  const [landmarks3D, setLandmarks3D] = useState<Landmark[]>([]);
 
   useEffect(() => {
-    const loadModel = async () => {
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-      );
-      landmarkerRef.current = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-        },
-        runningMode: "VIDEO",
-      });
-    };
-
-    loadModel();
-  }, []);
-
-  useEffect(() => {
-    let animationId = 0;
+    let animationId: number;
 
     const setupCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-            const width = videoRef.current!.videoWidth;
-            const height = videoRef.current!.videoHeight;
-            setDimensions({ width, height });
-            videoRef.current!.play();
-            animationId = requestAnimationFrame(runDetection);
-          };
-        }
-      } catch (err) {
-        console.error("Camera error:", err);
-        alert("Camera access failed.");
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          const width = videoRef.current!.videoWidth;
+          const height = videoRef.current!.videoHeight;
+          setDimensions({ width, height });
+          videoRef.current!.play();
+          animationId = requestAnimationFrame(runDetection);
+        };
       }
     };
 
     const runDetection = async () => {
-      if (videoRef.current && landmarkerRef.current && canvasRef.current) {
-        const results: PoseLandmarkerResult =
-          await landmarkerRef.current.detectForVideo(
-            videoRef.current,
-            performance.now()
-          );
+      if (!videoRef.current || !landmarkerRef.current) return;
+      const results: PoseLandmarkerResult =
+        await landmarkerRef.current.detectForVideo(
+          videoRef.current,
+          performance.now()
+        );
 
-        const ctx = canvasRef.current.getContext("2d");
-        if (ctx) {
-          ctx.clearRect(
-            0,
-            0,
-            canvasRef.current.width,
-            canvasRef.current.height
-          );
-          const utils = new DrawingUtils(ctx);
-
-          results.landmarks?.forEach((landmarks) => {
-            utils.drawLandmarks(landmarks, { color: "#00FFAA", lineWidth: 2 });
-            utils.drawConnectors(landmarks, PoseLandmarker.POSE_CONNECTIONS, {
-              color: "#FF9900",
-              lineWidth: 2,
-            });
-          });
-        }
+      if (results.landmarks?.[0]) {
+        setLandmarks3D(results.landmarks[0]);
       }
+
+      const ctx = canvasRef.current?.getContext("2d");
+      if (ctx && canvasRef.current) {
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        const utils = new DrawingUtils(ctx);
+
+        results.landmarks?.forEach((landmarks) => {
+          utils.drawLandmarks(landmarks, { color: "#00FFAA", lineWidth: 2 });
+          utils.drawConnectors(landmarks, PoseLandmarker.POSE_CONNECTIONS, {
+            color: "#FF9900",
+            lineWidth: 2,
+          });
+        });
+      }
+
       animationId = requestAnimationFrame(runDetection);
     };
 
     setupCamera();
     return () => cancelAnimationFrame(animationId);
-  }, []);
+  }, [landmarkerRef]);
 
   return (
-    <div className="relative">
-      <video
-        className="w-full transform -scale-x-100"
-        ref={videoRef}
-        autoPlay
-        muted
-        playsInline
-      />
-      {dimensions && (
-        <>
-          {showLandmarks && (
-            <canvas
-              ref={canvasRef}
-              className="absolute top-0 left-0 pointer-events-none"
-              width={dimensions.width}
-              height={dimensions.height}
-              style={{ transform: "scaleX(-1)" }}
-            />
-          )}
-        </>
-      )}
+    <div className="flex flex-row gap-4 p-4">
+      <div className="relative w-full max-w[640px] aspect-auto">
+        <video
+          className="h-full object-cover transform -scale-x-100"
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+        />
+        <canvas
+          ref={canvasRef}
+          className="absolute top-0 left-0 h-full pointer-events-none"
+          width={dimensions?.width}
+          height={dimensions?.height}
+          style={{ transform: "scaleX(-1)" }}
+        />
+      </div>
+
+      <div className="w-full border border-white rounded">
+        <ThreeCanvas landmarks={landmarks3D} />
+      </div>
     </div>
   );
-};
-
-export default LandmarkCanvas;
+}
