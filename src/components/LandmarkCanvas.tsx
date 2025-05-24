@@ -49,8 +49,8 @@ export default function LandmarkCanvas() {
           performance.now()
         );
 
-      if (results.landmarks?.[0]) {
-        setLandmarks3D(results.landmarks[0]);
+      if (results.worldLandmarks?.[0]) {
+        setLandmarks3D(results.worldLandmarks[0]);
       }
 
       const ctx = canvasRef.current?.getContext("2d");

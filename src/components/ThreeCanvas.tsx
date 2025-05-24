@@ -10,7 +10,8 @@ export default function ThreeCanvas({ landmarks }: { landmarks: Landmark[] }) {
       <ambientLight />
       <pointLight position={[10, 10, 10]} />
       <OrbitControls />
-
+      <gridHelper args={[10, 10]} />
+      <axesHelper args={[5]} />
       <LandmarkSkeleton landmarks={landmarks} />
     </Canvas>
   );
